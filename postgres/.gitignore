@@ -1,0 +1,4 @@
+# The root VirtualEnv rules ignore directories named scripts.
+!scripts/
+scripts/*
+!scripts/*.sql

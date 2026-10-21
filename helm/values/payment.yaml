@@ -1,0 +1,14 @@
+# Local image from docker-compose.yml; set the registry repository when publishing.
+image:
+  repository: lab3-payment-service
+  tag: local
+
+service:
+  port: 8060
+  targetPort: 8060
+
+# This Secret must provide DATABASE_URL for the payments database.
+# Create it in the same namespace as this Helm release.
+envFrom:
+  - secretRef:
+      name: payment-service-db

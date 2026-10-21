@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: library/postgres:13
+    container_name: postgres
+    restart: on-failure
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres/:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d reservations"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    ports:
+      - "5432:5432"
+
+  reservation-service:
+    image: lab3-reservation-service:local
+    build:
+      context: ./reservation-service
+    restart: on-failure
+    environment:
+      DATABASE_URL: "postgres://program:test@postgres:5432/reservations?sslmode=disable"
+    ports:
+      - "8070:8070"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway-service:
+    image: lab3-gateway-service:local
+    build:
+      context: ./gateway-service
+    restart: on-failure
+    environment:
+      RESERVATION_SERVICE_URL: "http://reservation-service:8070"
+      LOYALTY_SERVICE_URL: "http://loyalty-service:8050"
+      PAYMENT_SERVICE_URL: "http://payment-service:8060"
+    ports:
+      - "8080:8080"
+    depends_on:
+      reservation-service:
+        condition: service_started
+      loyalty-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+
+  payment-service:
+    image: lab3-payment-service:local
+    build:
+      context: ./payment-service
+    restart: on-failure
+    environment:
+      DATABASE_URL: "postgres://program:test@postgres:5432/payments?sslmode=disable"
+    ports:
+      - "8060:8060"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  loyalty-service:
+    image: lab3-loyalty-service:local
+    build:
+      context: ./loyalty-service
+    restart: on-failure
+    environment:
+      DATABASE_URL: "postgres://program:test@postgres:5432/loyalties?sslmode=disable"
+    ports:
+      - "8050:8050"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  swagger-ui:
+    image: lab3-swagger-ui:local
+    profiles: [docs]
+    build:
+      context: ./docs/swagger-ui
+    restart: on-failure
+    ports:
+      - "8081:8080"
+    depends_on:
+      gateway-service:
+        condition: service_started
+
+volumes:
+  db-data:

@@ -1,0 +1,38 @@
+\connect reservations
+
+GRANT USAGE ON SCHEMA public TO program;
+
+GRANT
+SELECT,
+INSERT
+,
+UPDATE,
+DELETE ON ALL TABLES IN SCHEMA public TO program;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO program;
+
+\connect loyalties
+
+GRANT USAGE ON SCHEMA public TO program;
+
+GRANT
+SELECT,
+INSERT
+,
+UPDATE,
+DELETE ON ALL TABLES IN SCHEMA public TO program;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO program;
+
+\connect payments
+
+GRANT USAGE ON SCHEMA public TO program;
+
+GRANT
+SELECT,
+INSERT
+,
+UPDATE,
+DELETE ON ALL TABLES IN SCHEMA public TO program;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO program;

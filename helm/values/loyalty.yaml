@@ -1,0 +1,14 @@
+# Local image from docker-compose.yml; set the registry repository when publishing.
+image:
+  repository: lab3-loyalty-service
+  tag: local
+
+service:
+  port: 8050
+  targetPort: 8050
+
+# This Secret must provide DATABASE_URL for the loyalties database.
+# Create it in the same namespace as this Helm release.
+envFrom:
+  - secretRef:
+      name: loyalty-service-db

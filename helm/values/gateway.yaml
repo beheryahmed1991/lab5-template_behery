@@ -1,0 +1,20 @@
+# Local image name from docker-compose.yml; use the registry image when publishing.
+image:
+  repository: lab3-gateway-service
+  tag: local
+
+service:
+  port: 8080
+  targetPort: 8080
+
+env:
+  RESERVATION_SERVICE_URL: http://reservation-service:8070
+  LOYALTY_SERVICE_URL: http://loyalty-service:8050
+  PAYMENT_SERVICE_URL: http://payment-service:8060
+
+# Hostless routing works with the local Minikube access URL.
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web

@@ -1,0 +1,45 @@
+replicaCount: 1
+
+image:
+  repository: lab3-gateway-service
+  tag: local
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  port: 8080
+  targetPort: 8080
+
+env: {}
+envFrom: []
+
+health:
+  path: /manage/health
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 32Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Enable only for services that should receive external HTTP requests.
+ingress:
+  enabled: false
+  className: traefik
+  annotations: {}
+  host: ""
+  path: /
+  pathType: Prefix
+  tls: []

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: rsoi-postgres
+description: PostgreSQL and the initial databases for the Hotels Booking System
+type: application
+version: 0.1.0
+appVersion: "13"
