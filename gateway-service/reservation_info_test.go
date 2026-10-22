@@ -38,7 +38,7 @@ func TestGatewayReservationInfo(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/api/v1/reservations", "/api/v1/reservations/" + bookingReservationUID:
-					if r.Header.Get("X-User-Name") != "Test Max" {
+					if testSubjectFromAuthorization(r.Header.Get("Authorization")) != "Test Max" {
 						t.Error("missing username")
 					}
 					if tc.fail == "missing" {
@@ -93,7 +93,7 @@ func TestGatewayReservationInfo(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-			req.Header.Set("X-User-Name", "Test Max")
+			req = testIdentityRequest(req, "Test Max")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != tc.status {
@@ -156,7 +156,7 @@ func TestGatewayReservationInfoValidation(t *testing.T) {
 		{"/api/v1/reservations/invalid", "Test Max"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-		req.Header.Set("X-User-Name", tc.user)
+		req = testIdentityRequest(req, tc.user)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, req)
 		if response.Code != 400 {

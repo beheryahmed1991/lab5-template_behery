@@ -30,9 +30,9 @@ func (store postgresReservationStore) CancelReservation(ctx context.Context, use
 
 func cancelReservationHandler(store reservationCanceler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		username := r.Header.Get("X-User-Name")
+		username := identityFromContext(r.Context()).Subject
 		if strings.TrimSpace(username) == "" || !utf8.ValidString(username) || utf8.RuneCountInString(username) > 80 {
-			writeJSONError(w, http.StatusBadRequest, "X-User-Name must contain between 1 and 80 characters")
+			writeJSONError(w, http.StatusBadRequest, "JWT subject must contain between 1 and 80 characters")
 			return
 		}
 		uid := r.PathValue("reservationUid")

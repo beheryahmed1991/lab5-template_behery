@@ -6,6 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -o /payment-service .
 
 FROM scratch
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /payment-service /payment-service
 USER 65532:65532
 EXPOSE 8060

@@ -49,8 +49,8 @@ func TestAuthMiddlewareJWTValidation(t *testing.T) {
 		if err != nil || claims.RegisteredClaims.Subject != "auth0|test-user" {
 			t.Error("validated subject was not available in request context")
 		}
-		if r.Header.Get("X-User-Name") != "auth0|test-user" {
-			t.Error("caller-supplied identity was not replaced with the validated subject")
+		if r.Header.Get("X-User-Name") != "" {
+			t.Error("untrusted identity header was not removed")
 		}
 		identity := identityFromContext(r.Context())
 		if identity.Subject != "auth0|test-user" || identity.Authorization != r.Header.Get("Authorization") {
@@ -127,7 +127,7 @@ func TestAuthMiddlewareJWTValidation(t *testing.T) {
 		"exp": time.Now().Add(time.Hour).Unix(),
 	}, "RS256")
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != validToken || r.Header.Get("X-User-Name") != "auth0|test-user" {
+		if r.Header.Get("Authorization") != validToken || r.Header.Get("X-User-Name") != "" {
 			t.Error("proxy did not forward the verified identity and original token")
 		}
 		w.WriteHeader(http.StatusNoContent)

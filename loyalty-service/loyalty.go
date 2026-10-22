@@ -39,9 +39,9 @@ func (store postgresLoyaltyStore) GetLoyalty(ctx context.Context, username strin
 
 func getLoyaltyHandler(store loyaltyReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		username := r.Header.Get("X-User-Name")
+		username := identityFromContext(r.Context()).Subject
 		if strings.TrimSpace(username) == "" || !utf8.ValidString(username) || utf8.RuneCountInString(username) > 80 {
-			loyaltyError(w, http.StatusBadRequest, "X-User-Name is required and must contain at most 80 characters")
+			loyaltyError(w, http.StatusBadRequest, "JWT subject must contain between 1 and 80 characters")
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

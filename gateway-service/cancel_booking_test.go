@@ -57,7 +57,7 @@ func TestGatewayCancellationWorkflow(t *testing.T) {
 					return
 				}
 				calls = append(calls, step)
-				if step != "payment" && r.Header.Get("X-User-Name") != "Test Max" {
+				if step != "payment" && testSubjectFromAuthorization(r.Header.Get("Authorization")) != "Test Max" {
 					t.Error("missing user header")
 				}
 				if step == "read" && (tc.fail == "owner" || tc.fail == "missing") {
@@ -97,7 +97,7 @@ func TestGatewayCancellationWorkflow(t *testing.T) {
 			}
 			defer handler.(*gatewayHandler).Close()
 			req := httptest.NewRequest(http.MethodDelete, "/api/v1/reservations/"+bookingReservationUID, nil)
-			req.Header.Set("X-User-Name", "Test Max")
+			req = testIdentityRequest(req, "Test Max")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != tc.status {
@@ -136,7 +136,7 @@ func TestGatewayCancellationValidation(t *testing.T) {
 		{"", bookingReservationUID}, {"   ", bookingReservationUID}, {strings.Repeat("a", 81), bookingReservationUID}, {"Test Max", "invalid"},
 	} {
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/reservations/"+tc.uid, nil)
-		req.Header.Set("X-User-Name", tc.username)
+		req = testIdentityRequest(req, tc.username)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, req)
 		if response.Code != 400 {
@@ -186,7 +186,7 @@ func TestGatewayConcurrentCancellation(t *testing.T) {
 				uid = strings.ToUpper(uid)
 			}
 			req := httptest.NewRequest(http.MethodDelete, "/api/v1/reservations/"+uid, nil)
-			req.Header.Set("X-User-Name", "Test Max")
+			req = testIdentityRequest(req, "Test Max")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != 204 {

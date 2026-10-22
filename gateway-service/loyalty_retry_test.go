@@ -40,7 +40,7 @@ func TestCancellationRetryRecovery(t *testing.T) {
 					if key != "cancel:"+bookingReservationUID {
 						t.Errorf("unexpected key %q", key)
 					}
-					if r.Header.Get("X-User-Name") != "Test Max" {
+					if testSubjectFromAuthorization(r.Header.Get("Authorization")) != "Test Max" {
 						t.Error("missing user")
 					}
 					var body map[string]int
@@ -72,7 +72,7 @@ func TestCancellationRetryRecovery(t *testing.T) {
 			// Configure before the lazy worker starts.
 			handler.retries.interval = 15 * time.Millisecond
 			request := httptest.NewRequest(http.MethodDelete, "/api/v1/reservations/"+bookingReservationUID, nil)
-			request.Header.Set("X-User-Name", "Test Max")
+			request = testIdentityRequest(request, "Test Max")
 			for i := 0; i < 2; i++ {
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, request.Clone(request.Context()))

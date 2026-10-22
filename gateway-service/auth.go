@@ -116,9 +116,8 @@ func newAuthMiddleware(config authConfig) (func(http.Handler) http.Handler, erro
 				Authorization: r.Header.Get("Authorization"),
 			}
 			r = r.Clone(context.WithValue(r.Context(), requestIdentityKey{}, identity))
-			// Temporary compatibility bridge until all service handlers use JWT claims.
-			// Never trust the caller's X-User-Name, even when their token is valid.
-			r.Header.Set("X-User-Name", identity.Subject)
+
+			r.Header.Del("X-User-Name")
 			next.ServeHTTP(w, r)
 		}))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

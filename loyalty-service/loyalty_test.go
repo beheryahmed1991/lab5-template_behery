@@ -29,7 +29,7 @@ func TestGetLoyaltyResponse(t *testing.T) {
 	for _, expected := range []Loyalty{{Status: "GOLD", Discount: 10, ReservationCount: 25}, {Status: "BRONZE", Discount: 5, ReservationCount: 0}} {
 		store := &fakeLoyaltyReader{result: expected}
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/loyalty", nil)
-		request.Header.Set("X-User-Name", "Test Max")
+		request = testIdentityRequest(request, "Test Max")
 		response := httptest.NewRecorder()
 		getLoyaltyHandler(store).ServeHTTP(response, request)
 		var got Loyalty
@@ -45,7 +45,7 @@ func TestGetLoyaltyRejectsInvalidUsername(t *testing.T) {
 	for _, username := range []string{"", "   ", strings.Repeat("x", 81)} {
 		store := &fakeLoyaltyReader{}
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/loyalty", nil)
-		request.Header.Set("X-User-Name", username)
+		request = testIdentityRequest(request, username)
 		response := httptest.NewRecorder()
 		getLoyaltyHandler(store).ServeHTTP(response, request)
 		if response.Code != 400 || store.calls != 0 {
@@ -56,7 +56,7 @@ func TestGetLoyaltyRejectsInvalidUsername(t *testing.T) {
 func TestGetLoyaltyDatabaseFailure(t *testing.T) {
 	store := &fakeLoyaltyReader{err: errors.New("private database details")}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/loyalty", nil)
-	request.Header.Set("X-User-Name", "Test Max")
+	request = testIdentityRequest(request, "Test Max")
 	response := httptest.NewRecorder()
 	getLoyaltyHandler(store).ServeHTTP(response, request)
 	if response.Code != 500 || strings.Contains(response.Body.String(), "private database details") {

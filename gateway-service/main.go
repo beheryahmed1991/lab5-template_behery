@@ -73,6 +73,7 @@ func newServiceProxy(serviceURL, variable, serviceName string) (*httputil.Revers
 	return &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
 			request.SetURL(target)
+			request.Out.Header.Del("X-User-Name")
 			request.SetXForwarded()
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {

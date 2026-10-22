@@ -45,7 +45,7 @@ func TestLoyaltyIdempotencyHeader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &fakeOnceUpdater{err: tc.failure}
 			request := httptest.NewRequest(http.MethodPatch, "/api/v1/loyalty", strings.NewReader(`{"reservationCountChange":-1}`))
-			request.Header.Set("X-User-Name", "Test Max")
+			request = testIdentityRequest(request, "Test Max")
 			request.Header.Set("Idempotency-Key", tc.key)
 			response := httptest.NewRecorder()
 			updateLoyaltyHandler(store).ServeHTTP(response, request)

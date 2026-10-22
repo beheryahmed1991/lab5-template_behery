@@ -44,9 +44,9 @@ func (store postgresReservationStore) ListReservations(ctx context.Context, user
 
 func listReservationsHandler(store reservationLister) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		username := r.Header.Get("X-User-Name")
+		username := identityFromContext(r.Context()).Subject
 		if strings.TrimSpace(username) == "" || !utf8.ValidString(username) || utf8.RuneCountInString(username) > 80 {
-			writeJSONError(w, http.StatusBadRequest, "X-User-Name must contain between 1 and 80 characters")
+			writeJSONError(w, http.StatusBadRequest, "JWT subject must contain between 1 and 80 characters")
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

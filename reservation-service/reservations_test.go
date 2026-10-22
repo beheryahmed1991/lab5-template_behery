@@ -74,7 +74,7 @@ func TestCreateReservationResponses(t *testing.T) {
 			}
 			store := &fakeReservationCreator{err: tt.err}
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/reservations", strings.NewReader(string(body)))
-			request.Header.Set("X-User-Name", "Test Max")
+			request = testIdentityRequest(request, "Test Max")
 			response := httptest.NewRecorder()
 			createReservationHandler(store).ServeHTTP(response, request)
 			if response.Code != tt.status || store.calls != 1 || store.username != "Test Max" {
@@ -110,7 +110,7 @@ func TestCreateReservationRejectsInvalidRequestsBeforeSaving(t *testing.T) {
 	} {
 		store := &fakeReservationCreator{}
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/reservations", strings.NewReader(tt.body))
-		request.Header.Set("X-User-Name", tt.username)
+		request = testIdentityRequest(request, tt.username)
 		response := httptest.NewRecorder()
 		createReservationHandler(store).ServeHTTP(response, request)
 		if response.Code != 400 || store.calls != 0 {

@@ -52,7 +52,7 @@ func TestCancelReservationHandler(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("DELETE /api/v1/reservations/{reservationUid}", cancelReservationHandler(store))
 			req := httptest.NewRequest(http.MethodDelete, "/api/v1/reservations/"+tc.uid, nil)
-			req.Header.Set("X-User-Name", tc.username)
+			req = testIdentityRequest(req, tc.username)
 			recorder := httptest.NewRecorder()
 			mux.ServeHTTP(recorder, req)
 			if recorder.Code != tc.status {
@@ -77,7 +77,7 @@ func TestCancelReservationHandler(t *testing.T) {
 				t.Fatal("expected empty response and canceled reservation")
 			}
 			again := httptest.NewRecorder()
-			mux.ServeHTTP(again, req.Clone(context.Background()))
+			mux.ServeHTTP(again, req.Clone(req.Context()))
 			if again.Code != 204 || again.Body.Len() != 0 || store.reservation.Status != "CANCELED" {
 				t.Fatal("repeated cancellation must succeed")
 			}

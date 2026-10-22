@@ -49,7 +49,7 @@ func TestUserFallbackSurvivesOpenCircuitsAndRecovers(t *testing.T) {
 	client := bookingClient{reservationURL: reservation.URL, paymentURL: payment.URL, loyaltyURL: loyalty.URL, http: &http.Client{Transport: transport, Timeout: time.Second}}
 	read := func() map[string]json.RawMessage {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-		request.Header.Set("X-User-Name", "Test Max")
+		request = testIdentityRequest(request, "Test Max")
 		response := httptest.NewRecorder()
 		client.getUserInfo(response, request)
 		if response.Code != http.StatusOK {
@@ -116,7 +116,7 @@ func TestPaymentFallbackOnConnectionAndDecodeFailures(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := httptest.NewRequest(http.MethodGet, "/api/v1/reservations/"+bookingReservationUID, nil)
-			request.Header.Set("X-User-Name", "Test Max")
+			request = testIdentityRequest(request, "Test Max")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			var body map[string]json.RawMessage

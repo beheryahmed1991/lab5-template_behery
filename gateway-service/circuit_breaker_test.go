@@ -192,7 +192,7 @@ func TestGatewaySharesBreakerBetweenProxyAndComposedReads(t *testing.T) {
 	}
 	for _, path := range []string{"/api/v1/hotels", "/api/v1/reservations", "/api/v1/me", "/api/v1/hotels"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
-		request.Header.Set("X-User-Name", "Test Max")
+		request = testIdentityRequest(request, "Test Max")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusServiceUnavailable {

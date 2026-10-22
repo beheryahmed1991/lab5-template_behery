@@ -18,8 +18,8 @@ func TestGatewayForwardsLoyaltyToCorrectService(t *testing.T) {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			const body = `{"status":"GOLD","discount":10,"reservationCount":25}`
 			loyaltyBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet || r.URL.Path != "/api/v1/loyalty" || r.Header.Get("X-User-Name") != "Test Max" {
-					t.Errorf("unexpected request: %s %s user=%q", r.Method, r.URL, r.Header.Get("X-User-Name"))
+				if r.Method != http.MethodGet || r.URL.Path != "/api/v1/loyalty" || testSubjectFromAuthorization(r.Header.Get("Authorization")) != "Test Max" {
+					t.Errorf("unexpected request: %s %s user=%q", r.Method, r.URL, testSubjectFromAuthorization(r.Header.Get("Authorization")))
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(status)
@@ -31,7 +31,7 @@ func TestGatewayForwardsLoyaltyToCorrectService(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/loyalty", nil)
-			req.Header.Set("X-User-Name", "Test Max")
+			req = testIdentityRequest(req, "Test Max")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != status || response.Body.String() != body || response.Header().Get("Content-Type") != "application/json" {

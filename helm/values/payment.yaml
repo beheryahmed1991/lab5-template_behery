@@ -9,6 +9,11 @@ service:
 
 # This Secret must provide DATABASE_URL for the payments database.
 # Create it in the same namespace as this Helm release.
+env:
+  AUTH0_ISSUER: https://dev-z3dj81jvdvdzl4nh.us.auth0.com/
+  AUTH0_AUDIENCE: https://lab5-api
+  AUTH0_JWKS_URL: https://dev-z3dj81jvdvdzl4nh.us.auth0.com/.well-known/jwks.json
+
 envFrom:
   - secretRef:
       name: payment-service-db

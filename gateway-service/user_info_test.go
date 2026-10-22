@@ -31,7 +31,7 @@ func TestGatewayUserInfo(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/api/v1/reservations":
-					if r.Header.Get("X-User-Name") != tc.user {
+					if testSubjectFromAuthorization(r.Header.Get("Authorization")) != tc.user {
 						t.Error("wrong reservation username")
 					}
 					if tc.fail == "reservations" {
@@ -53,7 +53,7 @@ func TestGatewayUserInfo(t *testing.T) {
 					json.NewEncoder(w).Encode(bookingPayment{UID: bookingPaymentUID, Status: "CANCELED", Price: 27000})
 				case "/api/v1/loyalty":
 					loyaltyCalls++
-					if r.Header.Get("X-User-Name") != tc.user {
+					if testSubjectFromAuthorization(r.Header.Get("Authorization")) != tc.user {
 						t.Error("wrong loyalty username")
 					}
 					if tc.fail == "loyalty" {
@@ -80,7 +80,7 @@ func TestGatewayUserInfo(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-			req.Header.Set("X-User-Name", tc.user)
+			req = testIdentityRequest(req, tc.user)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != tc.status {
@@ -136,7 +136,7 @@ func TestGatewayUserInfoValidation(t *testing.T) {
 	}
 	for _, username := range []string{"", "   ", strings.Repeat("a", 81)} {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-		req.Header.Set("X-User-Name", username)
+		req = testIdentityRequest(req, username)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, req)
 		if response.Code != 400 {

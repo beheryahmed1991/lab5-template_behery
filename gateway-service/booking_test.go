@@ -76,7 +76,7 @@ func TestGatewayBookingWorkflow(t *testing.T) {
 					return
 				}
 				if step == "loyalty" || step == "increment" || step == "reservation" || step == "cancel reservation" {
-					if r.Header.Get("X-User-Name") != "Test Max" {
+					if testSubjectFromAuthorization(r.Header.Get("Authorization")) != "Test Max" {
 						t.Error("missing user header")
 					}
 				}
@@ -105,7 +105,7 @@ func TestGatewayBookingWorkflow(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/reservations", strings.NewReader(validBookingBody))
-			req.Header.Set("X-User-Name", "Test Max")
+			req = testIdentityRequest(req, "Test Max")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != tc.status {
@@ -153,7 +153,7 @@ func TestGatewayBookingValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/reservations", strings.NewReader(tc.body))
-			req.Header.Set("X-User-Name", tc.user)
+			req = testIdentityRequest(req, tc.user)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			if response.Code != 400 {

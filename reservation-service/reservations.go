@@ -96,9 +96,9 @@ func (store postgresReservationStore) CreateReservation(ctx context.Context, use
 
 func createReservationHandler(store reservationCreator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		username := r.Header.Get("X-User-Name")
+		username := identityFromContext(r.Context()).Subject
 		if strings.TrimSpace(username) == "" || !utf8.ValidString(username) || utf8.RuneCountInString(username) > 80 {
-			writeJSONError(w, 400, "X-User-Name is required and must contain at most 80 characters")
+			writeJSONError(w, 400, "JWT subject must contain between 1 and 80 characters")
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 8192)

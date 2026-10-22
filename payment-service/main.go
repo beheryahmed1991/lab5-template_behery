@@ -18,6 +18,10 @@ func main() {
 }
 
 func run() error {
+	protect, err := newAuthMiddleware(authConfigFromEnv())
+	if err != nil {
+		return fmt.Errorf("configure authentication: %w", err)
+	}
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required; run the service with Docker Compose")
@@ -53,7 +57,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              ":8060",
-		Handler:           mux,
+		Handler:           protect(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

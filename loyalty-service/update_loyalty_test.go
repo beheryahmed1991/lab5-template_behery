@@ -52,7 +52,7 @@ func TestUpdateLoyaltyBothDirections(t *testing.T) {
 	}{{`{"reservationCountChange":1}`, 1}, {`{"reservationCountChange":-1}`, -1}} {
 		store := &fakeLoyaltyUpdater{}
 		request := httptest.NewRequest(http.MethodPatch, "/api/v1/loyalty", strings.NewReader(tt.body))
-		request.Header.Set("X-User-Name", "Test Max")
+		request = testIdentityRequest(request, "Test Max")
 		response := httptest.NewRecorder()
 		updateLoyaltyHandler(store).ServeHTTP(response, request)
 		var got Loyalty
@@ -69,7 +69,7 @@ func TestUpdateLoyaltyRejectsInvalidChanges(t *testing.T) {
 	for _, body := range []string{`{}`, `null`, `{"reservationCountChange":null}`, `{"reservationCountChange":0}`, `{"reservationCountChange":2}`, `{"reservationCountChange":1.5}`, `{"reservationCountChange":"1"}`, `{"reservationCountChange":1,"extra":true}`, `{"reservationCountChange":1}{}`} {
 		store := &fakeLoyaltyUpdater{}
 		request := httptest.NewRequest(http.MethodPatch, "/api/v1/loyalty", strings.NewReader(body))
-		request.Header.Set("X-User-Name", "Test Max")
+		request = testIdentityRequest(request, "Test Max")
 		response := httptest.NewRecorder()
 		updateLoyaltyHandler(store).ServeHTTP(response, request)
 		if response.Code != 400 || store.calls != 0 {
@@ -91,7 +91,7 @@ func TestUpdateLoyaltyMissingUsername(t *testing.T) {
 func TestUpdateLoyaltyDatabaseFailure(t *testing.T) {
 	store := &fakeLoyaltyUpdater{err: errors.New("private database details")}
 	request := httptest.NewRequest(http.MethodPatch, "/api/v1/loyalty", strings.NewReader(`{"reservationCountChange":1}`))
-	request.Header.Set("X-User-Name", "Test Max")
+	request = testIdentityRequest(request, "Test Max")
 	response := httptest.NewRecorder()
 	updateLoyaltyHandler(store).ServeHTTP(response, request)
 	if response.Code != 500 || strings.Contains(response.Body.String(), "private database details") {

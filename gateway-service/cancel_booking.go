@@ -17,9 +17,9 @@ func (client bookingClient) cancelBookingHandler(retries *loyaltyRetryQueue) htt
 	// Fixed lock buckets avoid retaining a mutex for every reservation forever.
 	var locks [64]sync.Mutex
 	return func(w http.ResponseWriter, r *http.Request) {
-		username := r.Header.Get("X-User-Name")
+		username := identityFromContext(r.Context()).Subject
 		if strings.TrimSpace(username) == "" || !utf8.ValidString(username) || utf8.RuneCountInString(username) > 80 {
-			gatewayError(w, 400, "X-User-Name is required and must contain at most 80 characters")
+			gatewayError(w, 400, "JWT subject must contain between 1 and 80 characters")
 			return
 		}
 		uid := strings.ToLower(r.PathValue("reservationUid"))

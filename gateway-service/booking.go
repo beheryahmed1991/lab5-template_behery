@@ -119,9 +119,7 @@ func (client bookingClient) callWithKey(ctx context.Context, method, base, path,
 	if err != nil {
 		return err
 	}
-	if username != "" {
-		req.Header.Set("X-User-Name", username)
-	}
+
 	if authorization := identityFromContext(ctx).Authorization; authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
@@ -161,9 +159,9 @@ func (client bookingClient) rollback(parent context.Context, username, reservati
 }
 
 func (client bookingClient) createBooking(w http.ResponseWriter, r *http.Request) {
-	username := r.Header.Get("X-User-Name")
+	username := identityFromContext(r.Context()).Subject
 	if strings.TrimSpace(username) == "" || !utf8.ValidString(username) || utf8.RuneCountInString(username) > 80 {
-		gatewayError(w, 400, "X-User-Name is required and must contain at most 80 characters")
+		gatewayError(w, 400, "JWT subject must contain between 1 and 80 characters")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)

@@ -52,7 +52,7 @@ func TestGetReservationHandler(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("GET /api/v1/reservations/{reservationUid}", getReservationHandler(store))
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/reservations/"+tc.uid, nil)
-			req.Header.Set("X-User-Name", tc.username)
+			req = testIdentityRequest(req, tc.username)
 			recorder := httptest.NewRecorder()
 			mux.ServeHTTP(recorder, req)
 			if recorder.Code != tc.status {
