@@ -1,148 +1,38 @@
 name: GitHub Classroom Workflow
-
 on:
   push:
-    branches: [master]
-  pull_request:
-    branches: [master]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
+    branches: [ master ]
 jobs:
   build:
-    name: Go checks and instructor tests on Kubernetes
+    name: Autograding
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    defaults:
-      run:
-        shell: bash
-    env:
-      KIND_CLUSTER_NAME: lab4-ci
-      KUBE_CONTEXT: kind-lab4-ci
-      LAB_NAMESPACE: lab4
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - uses: actions/checkout@v3
         with:
-          go-version-file: reservation-service/go.mod
-          cache-dependency-path: |
-            reservation-service/go.sum
-            payment-service/go.sum
-            loyalty-service/go.sum
-            gateway-service/go.sum
+          fetch-depth: 0
 
-      - name: Test and build all services
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          for service in reservation-service payment-service loyalty-service gateway-service; do
-            echo "::group::$service"
-            (
-              cd "$service"
-              go test -race -count=1 ./...
-              go vet ./...
-              CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/$service" .
-            )
-            echo "::endgroup::"
-          done
+      - uses: docker/setup-buildx-action@v2
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4.3.0
+      # TODO build, publish to docker hub, deploy to k8s
+
+      - name: Run API Tests
+        uses: matt-ball/newman-action@master
         with:
-          version: v3.19.0
+          collection: <variant>/postman/collection.json
+          environment: <variant>/postman/environment.json
+          delayRequest: 100
+          reporters: '[ "cli" ]'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          package-manager-cache: false
-
-      - name: Install Newman
-        run: npm install --global newman@6
-
-      - name: Validate charts and build application images
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          # Normalize shell/SQL inputs before Helm packages the init ConfigMap.
-          sed -i 's/\r$//' scripts/*.sh helm/postgres/files/*
-          chmod +x scripts/*.sh
-          helm lint helm/postgres --strict
-          for service in gateway reservation payment loyalty; do
-            helm lint helm/service -f "helm/values/$service.yaml" --strict
-          done
-          docker compose config --quiet
-          docker compose build reservation-service payment-service loyalty-service gateway-service
-
-      - name: Create Kubernetes test cluster
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          go install sigs.k8s.io/kind@v0.33.0
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          kind create cluster --name "$KIND_CLUSTER_NAME" --image kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d --wait 180s
-          kind get kubeconfig --name "$KIND_CLUSTER_NAME" > "$RUNNER_TEMP/lab4-kubeconfig"
-          chmod 600 "$RUNNER_TEMP/lab4-kubeconfig"
-          export KUBECONFIG="$RUNNER_TEMP/lab4-kubeconfig"
-          echo "KUBECONFIG=$KUBECONFIG" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/kubectl-bin"
-          curl --fail --location --retry 3 -o "$RUNNER_TEMP/kubectl-bin/kubectl" https://dl.k8s.io/release/v1.34.11/bin/linux/amd64/kubectl
-          curl --fail --location --retry 3 -o "$RUNNER_TEMP/kubectl-bin/kubectl.sha256" https://dl.k8s.io/release/v1.34.11/bin/linux/amd64/kubectl.sha256
-          (cd "$RUNNER_TEMP/kubectl-bin"; echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check)
-          chmod +x "$RUNNER_TEMP/kubectl-bin/kubectl"
-          export PATH="$RUNNER_TEMP/kubectl-bin:$PATH"
-          echo "$RUNNER_TEMP/kubectl-bin" >> "$GITHUB_PATH"
-          kubectl --context "$KUBE_CONTEXT" get nodes
-          kind load docker-image --name "$KIND_CLUSTER_NAME" \
-            lab3-reservation-service:local lab3-payment-service:local \
-            lab3-loyalty-service:local lab3-gateway-service:local
-          docker pull postgres:13
-          kind load docker-image --name "$KIND_CLUSTER_NAME" postgres:13
-
-      - name: Deploy database, services and Ingress with Helm
-        timeout-minutes: 12
-        run: bash scripts/ci-deploy-kubernetes.sh
-
-      - name: Run all original instructor tests through Ingress
+      - uses: education/autograding@v1
         id: autograder
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          # Keep the original instructor script unchanged. The kubectl adapter
-          # waits for asynchronous scaling to finish before Newman starts.
-          export LAB4_REAL_KUBECTL="$(command -v kubectl)"
-          mkdir -p "$RUNNER_TEMP/lab4-ci-bin"
-          ln -s "$GITHUB_WORKSPACE/scripts/ci-kubectl.sh" "$RUNNER_TEMP/lab4-ci-bin/kubectl"
-          export PATH="$RUNNER_TEMP/lab4-ci-bin:$PATH"
-          bash scripts/test-script.sh v2 loyalty-service "$LAB_NAMESPACE"
-
-      - name: Show Kubernetes diagnostics on failure
-        if: failure()
-        run: |
-          mkdir -p "$RUNNER_TEMP/kubectl-bin"
-          curl --fail --location --retry 3 -o "$RUNNER_TEMP/kubectl-bin/kubectl" https://dl.k8s.io/release/v1.34.11/bin/linux/amd64/kubectl
-          curl --fail --location --retry 3 -o "$RUNNER_TEMP/kubectl-bin/kubectl.sha256" https://dl.k8s.io/release/v1.34.11/bin/linux/amd64/kubectl.sha256
-          (cd "$RUNNER_TEMP/kubectl-bin"; echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check)
-          chmod +x "$RUNNER_TEMP/kubectl-bin/kubectl"
-          export PATH="$RUNNER_TEMP/kubectl-bin:$PATH"
-          echo "$RUNNER_TEMP/kubectl-bin" >> "$GITHUB_PATH"
-          kubectl --context "$KUBE_CONTEXT" get nodes -o wide || true
-          for namespace in "$LAB_NAMESPACE" ingress-system kube-system; do
-            kubectl --context "$KUBE_CONTEXT" -n "$namespace" get pods,services,events -o wide || true
-            kubectl --context "$KUBE_CONTEXT" -n "$namespace" describe pods || true
-            for pod in $(kubectl --context "$KUBE_CONTEXT" -n "$namespace" get pods -o name); do
-              kubectl --context "$KUBE_CONTEXT" -n "$namespace" logs "$pod" --all-containers --tail=100 || true
-              kubectl --context "$KUBE_CONTEXT" -n "$namespace" logs "$pod" --all-containers --previous --tail=100 || true
-            done
-          done
-          cat "$RUNNER_TEMP/traefik-port-forward.log" 2>/dev/null || true
-
-      - name: Remove temporary CI cluster
-        if: always()
         continue-on-error: true
-        run: kind delete cluster --name "$KIND_CLUSTER_NAME"
+
+      - name: Github auto grader mark
+        uses: Romanow/google-sheet-autograder-marker@v1.0
+        with:
+          google_token: ${{secrets.GOOGLE_API_KEY}}
+          sheet_id: "1xkgjUX6Qmk7rdJG-QPOToav-HWWtthJjnShIKnw3oIY"
+          homework_number: 5
+          user_column: 'D'
+          column_offset: 'F'
+          mark: "'+"

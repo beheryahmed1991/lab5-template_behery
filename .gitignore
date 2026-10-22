@@ -1234,10 +1234,6 @@ buildNumber.properties
 .mvn/timing.properties
 # https://github.com/takari/maven-wrapper#usage-without-binary-jar
 .mvn/wrapper/maven-wrapper.jar
-# Track Go module definitions despite the generic kernel module ignore rule.
-!**/go.mod
 
-# Keep Kubernetes CI helpers despite the generic Scripts directory rule.
-!/scripts/
-!/scripts/ci-deploy-kubernetes.sh
-!/scripts/ci-kubectl.sh
+# Local temporary build cache
+/work/
