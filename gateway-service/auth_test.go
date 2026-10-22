@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -48,6 +49,13 @@ func TestAuthMiddlewareJWTValidation(t *testing.T) {
 		if err != nil || claims.RegisteredClaims.Subject != "auth0|test-user" {
 			t.Error("validated subject was not available in request context")
 		}
+		if r.Header.Get("X-User-Name") != "auth0|test-user" {
+			t.Error("caller-supplied identity was not replaced with the validated subject")
+		}
+		identity := identityFromContext(r.Context())
+		if identity.Subject != "auth0|test-user" || identity.Authorization != r.Header.Get("Authorization") {
+			t.Error("validated identity and token were not preserved in context")
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	cases := []struct {
@@ -87,6 +95,7 @@ func TestAuthMiddlewareJWTValidation(t *testing.T) {
 				header = "Bearer " + signAuthTestToken(t, signingKey, claims, "RS256")
 			}
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/hotels", nil)
+			req.Header.Set("X-User-Name", "forged-user")
 			if header != "-" {
 				req.Header.Set("Authorization", header)
 			}
@@ -110,6 +119,76 @@ func TestAuthMiddlewareJWTValidation(t *testing.T) {
 	handler.ServeHTTP(response, req)
 	if response.Code != 401 {
 		t.Fatalf("wrong algorithm got %d, want 401", response.Code)
+	}
+
+	// Exercise the real production factory and reverse proxy, not just the middleware.
+	validToken := "Bearer " + signAuthTestToken(t, key, map[string]any{
+		"iss": config.Issuer, "aud": config.Audience, "sub": "auth0|test-user",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}, "RS256")
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != validToken || r.Header.Get("X-User-Name") != "auth0|test-user" {
+			t.Error("proxy did not forward the verified identity and original token")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+	t.Setenv("AUTH0_ISSUER", config.Issuer)
+	t.Setenv("AUTH0_AUDIENCE", config.Audience)
+	t.Setenv("AUTH0_JWKS_URL", config.JWKSURL)
+	gateway, err := newAuthenticatedGatewayHandler(backend.URL, backend.URL, backend.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gateway.(*gatewayHandler).Close()
+	proxyRequest := httptest.NewRequest(http.MethodGet, "/api/v1/loyalty", nil)
+	proxyRequest.Header.Set("Authorization", validToken)
+	proxyRequest.Header.Set("X-User-Name", "forged-user")
+	proxyResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(proxyResponse, proxyRequest)
+	if proxyResponse.Code != http.StatusNoContent {
+		t.Fatalf("authenticated proxy returned %d", proxyResponse.Code)
+	}
+}
+
+func TestGatewayForwardsTokenInCallsRollbackAndRetries(t *testing.T) {
+	const authorization = "Bearer locally-validated-token"
+	var calls atomic.Int32
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("Authorization") != authorization {
+			t.Error("outgoing workflow request lost its token")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+	client := bookingClient{http: backend.Client(), reservationURL: backend.URL, paymentURL: backend.URL, loyaltyURL: backend.URL}
+	parent := context.WithValue(context.Background(), requestIdentityKey{}, requestIdentity{
+		Subject: "auth0|test-user", Authorization: authorization,
+	})
+	for _, target := range []string{"/api/v1/hotels", "/api/v1/reservations", "/api/v1/payments"} {
+		if err := client.call(parent, http.MethodGet, backend.URL, target, "", nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	canceled, cancel := context.WithCancel(parent)
+	cancel()
+	client.rollback(canceled, "auth0|test-user", bookingReservationUID, bookingPaymentUID)
+	if calls.Load() != 5 {
+		t.Fatalf("calls including rollback = %d, want 5", calls.Load())
+	}
+	queue := newLoyaltyRetryQueue(client, 5*time.Millisecond)
+	defer queue.Close()
+	if err := queue.enqueue(loyaltyRetryJob{username: "auth0|test-user", reservationUID: bookingReservationUID, authorization: authorization}); err != nil {
+		t.Fatal(err)
+	}
+	awaitRetry(t, func() bool {
+		queue.mu.Lock()
+		defer queue.mu.Unlock()
+		return len(queue.jobs) == 0
+	})
+	if calls.Load() != 6 {
+		t.Fatalf("calls including background retry = %d, want 6", calls.Load())
 	}
 }
 
@@ -157,6 +236,55 @@ func TestAuthConfigValidation(t *testing.T) {
 	t.Setenv("AUTH0_JWKS_URL", "https://issuer.example/keys")
 	if _, err := newAuthMiddleware(authConfigFromEnv()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAuthenticatedGatewayRejectsMissingTokens(t *testing.T) {
+	t.Setenv("AUTH0_ISSUER", "https://issuer.example/")
+	t.Setenv("AUTH0_AUDIENCE", "lab5-api")
+	t.Setenv("AUTH0_JWKS_URL", "https://issuer.example/keys")
+	var backendCalls atomic.Int32
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		backendCalls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+	handler, err := newAuthenticatedGatewayHandler(backend.URL, backend.URL, backend.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer handler.(*gatewayHandler).Close()
+	for _, tc := range []struct {
+		method, path string
+		status       int
+	}{
+		{"GET", "/api/v1/hotels", 401},
+		{"GET", "/api/v1/loyalty", 401},
+		{"GET", "/api/v1/reservations", 401},
+		{"POST", "/api/v1/reservations", 401},
+		{"GET", "/api/v1/me", 401},
+		{"GET", "/manage/health", 200},
+	} {
+		response := httptest.NewRecorder()
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req.Header.Set("X-User-Name", "forged-user")
+		handler.ServeHTTP(response, req)
+		if response.Code != tc.status {
+			t.Errorf("%s %s: got %d, want %d", tc.method, tc.path, response.Code, tc.status)
+		}
+	}
+	if backendCalls.Load() != 0 {
+		t.Fatal("unauthenticated request reached a backend")
+	}
+}
+
+func TestAuthenticatedGatewayRequiresAuthConfiguration(t *testing.T) {
+	t.Setenv("AUTH0_ISSUER", "")
+	t.Setenv("AUTH0_AUDIENCE", "")
+	t.Setenv("AUTH0_JWKS_URL", "")
+	if handler, err := newAuthenticatedGatewayHandler("http://localhost:8070", "http://localhost:8050", "http://localhost:8060"); err == nil {
+		handler.(*gatewayHandler).Close()
+		t.Fatal("gateway accepted missing authentication configuration")
 	}
 }
 

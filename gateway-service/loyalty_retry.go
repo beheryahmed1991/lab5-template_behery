@@ -11,9 +11,14 @@ import (
 
 const loyaltyRetryInterval = 10 * time.Second
 
-type loyaltyRetryJob struct{ username, reservationUID string }
+type loyaltyRetryJob struct{ username, reservationUID, authorization string }
 
 func (client bookingClient) decrementLoyalty(ctx context.Context, job loyaltyRetryJob) error {
+	if job.authorization != "" {
+		ctx = context.WithValue(ctx, requestIdentityKey{}, requestIdentity{
+			Subject: job.username, Authorization: job.authorization,
+		})
+	}
 	return client.callWithKey(ctx, http.MethodPatch, client.loyaltyURL, "/api/v1/loyalty",
 		job.username, map[string]int{"reservationCountChange": -1}, nil, "cancel:"+job.reservationUID)
 }

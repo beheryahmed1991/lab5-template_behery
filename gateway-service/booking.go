@@ -122,6 +122,9 @@ func (client bookingClient) callWithKey(ctx context.Context, method, base, path,
 	if username != "" {
 		req.Header.Set("X-User-Name", username)
 	}
+	if authorization := identityFromContext(ctx).Authorization; authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -142,8 +145,8 @@ func (client bookingClient) callWithKey(ctx context.Context, method, base, path,
 	return nil
 }
 
-func (client bookingClient) rollback(username, reservationUID, paymentUID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+func (client bookingClient) rollback(parent context.Context, username, reservationUID, paymentUID string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 12*time.Second)
 	defer cancel()
 	if reservationUID != "" {
 		if err := client.call(ctx, http.MethodDelete, client.reservationURL, "/api/v1/reservations/"+reservationUID, username, nil, nil); err != nil {
@@ -222,17 +225,17 @@ func (client bookingClient) createBooking(w http.ResponseWriter, r *http.Request
 	}
 	internal := map[string]string{"hotelUid": request.HotelUID, "paymentUid": payment.UID, "startDate": request.StartDate, "endDate": request.EndDate}
 	if err := client.call(ctx, http.MethodPost, client.reservationURL, "/api/v1/reservations", username, internal, &reservation); err != nil {
-		client.rollback(username, "", payment.UID)
+		client.rollback(ctx, username, "", payment.UID)
 		gatewayError(w, 503, "Unable to create reservation")
 		return
 	}
 	if !validBookingUUID(reservation.UID) {
-		client.rollback(username, "", payment.UID)
+		client.rollback(ctx, username, "", payment.UID)
 		gatewayError(w, 503, "Invalid Reservation Service response")
 		return
 	}
 	if err := client.call(ctx, http.MethodPatch, client.loyaltyURL, "/api/v1/loyalty", username, map[string]int{"reservationCountChange": 1}, nil); err != nil {
-		client.rollback(username, reservation.UID, payment.UID)
+		client.rollback(ctx, username, reservation.UID, payment.UID)
 		gatewayError(w, 503, "Unable to update loyalty")
 		return
 	}

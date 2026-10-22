@@ -39,6 +39,9 @@ services:
     restart: on-failure
     environment:
       RESERVATION_SERVICE_URL: "http://reservation-service:8070"
+      AUTH0_ISSUER: "${AUTH0_ISSUER:-https://dev-z3dj81jvdvdzl4nh.us.auth0.com/}"
+      AUTH0_AUDIENCE: "${AUTH0_AUDIENCE:-https://lab5-api}"
+      AUTH0_JWKS_URL: "${AUTH0_JWKS_URL:-https://dev-z3dj81jvdvdzl4nh.us.auth0.com/.well-known/jwks.json}"
       LOYALTY_SERVICE_URL: "http://loyalty-service:8050"
       PAYMENT_SERVICE_URL: "http://payment-service:8060"
     ports:

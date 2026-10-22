@@ -61,7 +61,7 @@ func (client bookingClient) cancelBookingHandler(retries *loyaltyRetryQueue) htt
 			return
 		}
 		// Finish the bounded workflow even if the caller disconnects after it starts.
-		operationCtx, operationCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		operationCtx, operationCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
 		defer operationCancel()
 		if err := client.call(operationCtx, http.MethodDelete, client.paymentURL, "/api/v1/payments/"+reservation.PaymentUID, "", nil, nil); err != nil {
 			gatewayError(w, 503, "Unable to cancel payment")
@@ -73,7 +73,7 @@ func (client bookingClient) cancelBookingHandler(retries *loyaltyRetryQueue) htt
 			var current struct {
 				Status string `json:"status"`
 			}
-			recoveryCtx, recoveryCancel := context.WithTimeout(context.Background(), 12*time.Second)
+			recoveryCtx, recoveryCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 12*time.Second)
 			defer recoveryCancel()
 			readErr := client.call(recoveryCtx, http.MethodGet, client.reservationURL, path, username, nil, &current)
 			if readErr != nil || current.Status != "CANCELED" {
@@ -82,7 +82,8 @@ func (client bookingClient) cancelBookingHandler(retries *loyaltyRetryQueue) htt
 				return
 			}
 		}
-		job := loyaltyRetryJob{username: username, reservationUID: uid}
+		job := loyaltyRetryJob{username: username, reservationUID: uid,
+			authorization: identityFromContext(r.Context()).Authorization}
 		if err := client.decrementLoyalty(operationCtx, job); err != nil {
 			log.Printf("Deferring loyalty update for %s: %v", uid, err)
 			if err := retries.enqueue(job); err != nil {

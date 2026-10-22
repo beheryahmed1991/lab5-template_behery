@@ -8,6 +8,9 @@ service:
   targetPort: 8080
 
 env:
+  AUTH0_ISSUER: https://dev-z3dj81jvdvdzl4nh.us.auth0.com/
+  AUTH0_AUDIENCE: https://lab5-api
+  AUTH0_JWKS_URL: https://dev-z3dj81jvdvdzl4nh.us.auth0.com/.well-known/jwks.json
   RESERVATION_SERVICE_URL: http://reservation-service:8070
   LOYALTY_SERVICE_URL: http://loyalty-service:8050
   PAYMENT_SERVICE_URL: http://payment-service:8060

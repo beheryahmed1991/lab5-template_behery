@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -20,12 +21,40 @@ type authConfig struct {
 	JWKSURL  string
 }
 
+type requestIdentityKey struct{}
+
+// Only the JWT middleware creates this value from validated claims.
+type requestIdentity struct {
+	Subject       string
+	Authorization string
+}
+
+func identityFromContext(ctx context.Context) requestIdentity {
+	identity, _ := ctx.Value(requestIdentityKey{}).(requestIdentity)
+	return identity
+}
+
 func authConfigFromEnv() authConfig {
 	return authConfig{
 		Issuer:   os.Getenv("AUTH0_ISSUER"),
 		Audience: os.Getenv("AUTH0_AUDIENCE"),
 		JWKSURL:  os.Getenv("AUTH0_JWKS_URL"),
 	}
+}
+
+// The production entry point must wrap routing before accepting requests.
+func newAuthenticatedGatewayHandler(reservationURL, loyaltyURL, paymentURL string) (http.Handler, error) {
+	protect, err := newAuthMiddleware(authConfigFromEnv())
+	if err != nil {
+		return nil, fmt.Errorf("configure gateway authentication: %w", err)
+	}
+	handler, err := newGatewayHandler(reservationURL, loyaltyURL, paymentURL)
+	if err != nil {
+		return nil, err
+	}
+	gateway := handler.(*gatewayHandler)
+	gateway.Handler = protect(gateway.Handler)
+	return gateway, nil
 }
 
 func newAuthMiddleware(config authConfig) (func(http.Handler) http.Handler, error) {
@@ -76,7 +105,22 @@ func newAuthMiddleware(config authConfig) (func(http.Handler) http.Handler, erro
 		return nil, fmt.Errorf("configure authentication: %w", err)
 	}
 	return func(next http.Handler) http.Handler {
-		secured := middleware.CheckJWT(next)
+		secured := middleware.CheckJWT(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, err := jwtmiddleware.GetClaims[*validator.ValidatedClaims](r.Context())
+			if err != nil {
+				gatewayError(w, http.StatusUnauthorized, "Unauthorized")
+				return
+			}
+			identity := requestIdentity{
+				Subject:       claims.RegisteredClaims.Subject,
+				Authorization: r.Header.Get("Authorization"),
+			}
+			r = r.Clone(context.WithValue(r.Context(), requestIdentityKey{}, identity))
+			// Temporary compatibility bridge until all service handlers use JWT claims.
+			// Never trust the caller's X-User-Name, even when their token is valid.
+			r.Header.Set("X-User-Name", identity.Subject)
+			next.ServeHTTP(w, r)
+		}))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
 			if (path != "/api" && !strings.HasPrefix(path, "/api/")) ||

@@ -19,7 +19,7 @@ func main() {
 }
 
 func run() error {
-	handler, err := newGatewayHandler(os.Getenv("RESERVATION_SERVICE_URL"), os.Getenv("LOYALTY_SERVICE_URL"), os.Getenv("PAYMENT_SERVICE_URL"))
+	handler, err := newAuthenticatedGatewayHandler(os.Getenv("RESERVATION_SERVICE_URL"), os.Getenv("LOYALTY_SERVICE_URL"), os.Getenv("PAYMENT_SERVICE_URL"))
 	if err != nil {
 		return err
 	}
