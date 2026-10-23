@@ -73,7 +73,7 @@ jobs:
           kind load docker-image postgres:13 --name lab5-ci
       - name: Deploy with Helm
         run: bash tools/ci/deploy.sh
-      - name: Run instructor Postman assertions
+      - name: Run API Tests
         run: node tools/postman/run.cjs v2
       - name: Diagnostics on failure
         if: failure()
