@@ -31,8 +31,8 @@ without modifying them. It supplies the environment in memory. Only in the runti
 copy of the token request, it renames `clientId`/`clientSecret` to Auth0's
 `client_id`/`client_secret` and adds the audience. Instructor assertions, request
 order, API routes and booking data remain unchanged. Credentials and tokens are
-not exported. The reporter prints names, HTTP statuses and assertion results,
-without printing request/response bodies or Authorization headers.
+not exported. Newman's standard CLI reporter prints request results and its
+executed/failed summary table. Verbose request/response logging is not enabled.
 
 Tests create and cancel a reservation in the disposable CI database, not your
 local database. The optional Go PostgreSQL integration test requiring

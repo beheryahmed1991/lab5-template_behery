@@ -63,26 +63,15 @@ function main() {
     return;
   }
   const newman = require('newman');
-  // Never log request bodies, credentials, response bodies or Authorization headers.
-  newman.run({ ...config, reporters: [], delayRequest: 100, timeoutRequest: 30000,
+  // Use Newman's standard CLI report, including its executed/failed summary table.
+  newman.run({ ...config, reporters: ['cli'], delayRequest: 100, timeoutRequest: 30000,
     timeoutScript: 10000, insecure: false }, (error, summary) => {
     if (error) {
       console.error('Newman could not complete the run.');
       process.exitCode = 1;
       return;
     }
-    for (const execution of summary.run.executions) {
-      const status = execution.response ? execution.response.code : 'connection error';
-      const assertions = execution.assertions || [];
-      const failed = assertions.filter((assertion) => assertion.error).length;
-      console.log(execution.item.name + ': HTTP ' + status + '; assertions ' + (assertions.length - failed) + '/' + assertions.length);
-      for (const assertion of assertions) {
-        if (assertion.error) console.error('  FAIL ' + assertion.assertion + ': ' + assertion.error.message);
-      }
-    }
     const stats = summary.run.stats;
-    console.log('Requests: ' + stats.requests.total + ', errors: ' + stats.requests.failed);
-    console.log('Assertions: ' + stats.assertions.total + ', failed: ' + stats.assertions.failed);
     process.exitCode = summary.run.failures.length || !stats.requests.total || !stats.assertions.total ? 1 : 0;
   });
 }
