@@ -1,5 +1,7 @@
 # Лабораторная работа #5
 
+Настройка CI и Auth0 Secrets: [Lab 5 CI](docs/lab5-ci.md).
+
 ![GitHub Classroom Workflow](../../workflows/GitHub%20Classroom%20Workflow/badge.svg?branch=master)
 
 ## OAuth2 Authorization

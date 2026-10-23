@@ -1,38 +1,97 @@
 name: GitHub Classroom Workflow
 on:
   push:
-    branches: [ master ]
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
-  build:
-    name: Autograding
+  unit-tests:
+    name: Unit tests (${{ matrix.service }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway, reservation, payment, loyalty]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          fetch-depth: 0
-
-      - uses: docker/setup-buildx-action@v2
-
-      # TODO build, publish to docker hub, deploy to k8s
-
-      - name: Run API Tests
-        uses: matt-ball/newman-action@master
+          go-version-file: ${{ matrix.service }}-service/go.mod
+          cache-dependency-path: ${{ matrix.service }}-service/go.sum
+      - name: Build and test
+        working-directory: ${{ matrix.service }}-service
+        run: |
+          go build ./...
+          go test ./...
+          go vet ./...
+  api-tests:
+    name: Instructor API tests (v2)
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LAB_NAMESPACE: lab5-ci
+      KUBE_CONTEXT: kind-lab5-ci
+      AUTH0_ISSUER: https://dev-z3dj81jvdvdzl4nh.us.auth0.com/
+      AUTH0_AUDIENCE: https://lab5-api
+      AUTH0_JWKS_URL: https://dev-z3dj81jvdvdzl4nh.us.auth0.com/.well-known/jwks.json
+      AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+      AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+      AUTH0_TEST_USERNAME: ${{ secrets.AUTH0_TEST_USERNAME }}
+      AUTH0_TEST_PASSWORD: ${{ secrets.AUTH0_TEST_PASSWORD }}
+      LAB5_SERVICE_URL: http://127.0.0.1:8080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          collection: v2/postman/collection.json
-          environment: v2/postman/environment.json
-          delayRequest: 100
-          reporters: '[ "cli" ]'
-
-      - uses: education/autograding@v1
-        id: autograder
-        continue-on-error: true
-
-      - name: Github auto grader mark
-        uses: Romanow/google-sheet-autograder-marker@v1.0
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/postman/package-lock.json
+      - name: Install Newman
+        working-directory: tools/postman
+        run: npm ci --ignore-scripts
+      - name: Check Auth0 configuration
+        run: node tools/postman/run.cjs v2 --check
+      - uses: azure/setup-helm@v4
         with:
-          google_token: ${{secrets.GOOGLE_API_KEY}}
-          sheet_id: "1xkgjUX6Qmk7rdJG-QPOToav-HWWtthJjnShIKnw3oIY"
-          homework_number: 5
-          user_column: 'D'
-          column_offset: 'F'
-          mark: "'+"
+          version: v3.19.0
+      - name: Create disposable Kubernetes cluster
+        run: |
+          curl --fail --location --retry 3 https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64 -o "$RUNNER_TEMP/kind"
+          chmod +x "$RUNNER_TEMP/kind"
+          sudo install "$RUNNER_TEMP/kind" /usr/local/bin/kind
+          kind create cluster --name lab5-ci --wait 180s
+      - name: Build and load images
+        run: |
+          for service in reservation payment loyalty gateway; do
+            docker build -t "lab5-${service}-service:ci" "./${service}-service"
+            kind load docker-image "lab5-${service}-service:ci" --name lab5-ci
+          done
+          docker pull postgres:13
+          kind load docker-image postgres:13 --name lab5-ci
+      - name: Deploy with Helm
+        run: bash tools/ci/deploy.sh
+      - name: Run instructor Postman assertions
+        run: node tools/postman/run.cjs v2
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          if kubectl config get-contexts -o name | grep -qx "$KUBE_CONTEXT"; then
+            kubectl --context "$KUBE_CONTEXT" -n "$LAB_NAMESPACE" get pods,services,pvc || true
+            kubectl --context "$KUBE_CONTEXT" -n "$LAB_NAMESPACE" get events --sort-by=.lastTimestamp || true
+            for service in reservation payment loyalty gateway; do
+              kubectl --context "$KUBE_CONTEXT" -n "$LAB_NAMESPACE" logs "deployment/${service}-service" --tail=60 || true
+            done
+            kubectl --context "$KUBE_CONTEXT" -n "$LAB_NAMESPACE" logs postgres-0 --tail=60 || true
+          fi
+          if [ -f "$RUNNER_TEMP/lab5-port-forward.log" ]; then
+            cat "$RUNNER_TEMP/lab5-port-forward.log"
+          fi
+      - name: Clean up disposable cluster
+        if: always()
+        run: |
+          if command -v kind >/dev/null; then
+            kind delete cluster --name lab5-ci
+          fi
